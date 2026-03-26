@@ -50,11 +50,7 @@ jobs:
           framework: terraform
           quiet: true
           soft_fail: false
-          # Skip checks you've consciously accepted risk on
-          # Document your reasoning in a comment when you skip checks
-          skip_check: >-
-            CKV_AWS_144,
-            CKV_AWS_145
+          skip_check: "CKV_AWS_144,CKV_AWS_145"
 
   # -------------------------------------------------------
   # Job 2: Terraform validate — basic syntax check
