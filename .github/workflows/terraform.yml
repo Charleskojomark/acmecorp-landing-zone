@@ -134,10 +134,16 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        # The account-specific variable name matches what each accounts' variables.tf expects
         run: |
+          # Map each matrix account to its corresponding secret
+          case "${{ matrix.account }}" in
+            dev)     ACCOUNT_ID="${{ secrets.DEV_ACCOUNT_ID }}" ;;
+            staging) ACCOUNT_ID="${{ secrets.STAGING_ACCOUNT_ID }}" ;;
+            prod)    ACCOUNT_ID="${{ secrets.PROD_ACCOUNT_ID }}" ;;
+          esac
+
           terraform plan \
-            -var="${{ matrix.account }}_account_id=${{ secrets[format('{0}_ACCOUNT_ID', upper(matrix.account))] }}" \
+            -var="${{ matrix.account }}_account_id=${ACCOUNT_ID}" \
             -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
             -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
             -out=tfplan \
