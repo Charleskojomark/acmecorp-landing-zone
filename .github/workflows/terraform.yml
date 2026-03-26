@@ -1,0 +1,317 @@
+# ============================================================
+# Terraform Landing Zone Pipeline
+#
+# FLOW:
+# Pull Request opened/updated:
+#   → Security scan (checkov)
+#   → Format check
+#   → Validate
+#   → Plan (all accounts in parallel)
+#   → Post plan as PR comment
+#
+# Merge to main:
+#   → Apply (only changed accounts)
+# ============================================================
+
+name: Terraform Landing Zone
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Required for OIDC authentication to AWS
+# and for posting comments on PRs
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: "1.7.0"
+  AWS_REGION: "us-east-1"
+
+jobs:
+  # -------------------------------------------------------
+  # Job 1: Security scanning — runs before Terraform
+  # Catches misconfigurations before they reach AWS
+  # -------------------------------------------------------
+  security_scan:
+    name: "Security Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov (IaC Security Scanner)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          quiet: true
+          soft_fail: false
+          # Skip checks you've consciously accepted risk on
+          # Document your reasoning in a comment when you skip checks
+          skip_check: >-
+            CKV_AWS_144,
+            CKV_AWS_145
+
+  # -------------------------------------------------------
+  # Job 2: Terraform validate — basic syntax check
+  # -------------------------------------------------------
+  validate:
+    name: "Validate (${{ matrix.account }})"
+    runs-on: ubuntu-latest
+    needs: security_scan
+
+    strategy:
+      matrix:
+        account: [dev, staging, prod]
+      fail-fast: false
+
+    defaults:
+      run:
+        working-directory: accounts/${{ matrix.account }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MGMT_ACCOUNT_ID }}:role/GitHubActionsRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        # If this fails, run 'terraform fmt -recursive' locally and commit
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+  # -------------------------------------------------------
+  # Job 3: Plan — show exactly what will change
+  # -------------------------------------------------------
+  plan:
+    name: "Plan (${{ matrix.account }})"
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+
+    strategy:
+      matrix:
+        account: [dev, staging, prod]
+      fail-fast: false
+
+    defaults:
+      run:
+        working-directory: accounts/${{ matrix.account }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MGMT_ACCOUNT_ID }}:role/GitHubActionsRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        # The account-specific variable name matches what each accounts' variables.tf expects
+        run: |
+          terraform plan \
+            -var="${{ matrix.account }}_account_id=${{ secrets[format('{0}_ACCOUNT_ID', upper(matrix.account))] }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -out=tfplan \
+            -no-color 2>&1 | tee plan_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.account }}
+          path: accounts/${{ matrix.account }}/tfplan
+          retention-days: 5
+
+      - name: Post Plan as PR Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync(
+              'accounts/${{ matrix.account }}/plan_output.txt', 'utf8'
+            );
+
+            // Truncate if plan is very long to avoid GitHub comment limits
+            const maxLength = 60000;
+            const truncated = planOutput.length > maxLength
+              ? planOutput.substring(0, maxLength) + '\n\n... Plan truncated (too long). Download artifact for full output.'
+              : planOutput;
+
+            // Find and update existing comment if it exists (keeps PR clean)
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.find(c =>
+              c.body.includes('## 🏗 Terraform Plan') &&
+              c.body.includes('`${{ matrix.account }}`')
+            );
+
+            const body = `## 🏗 Terraform Plan — \`${{ matrix.account }}\`
+
+            <details>
+            <summary>Click to expand plan output</summary>
+
+            \`\`\`terraform
+            ${truncated}
+            \`\`\`
+            </details>
+
+            **Triggered by:** @${{ github.actor }} | **Commit:** ${{ github.sha }}`;
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+  # -------------------------------------------------------
+  # Job 4: Apply — only runs when PR merges to main
+  # Applies accounts sequentially: dev → staging → prod
+  # If dev fails, staging and prod won't run — safe progression
+  # -------------------------------------------------------
+  apply_dev:
+    name: "Apply Dev"
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: dev  # Requires environment approval if configured in GitHub
+
+    defaults:
+      run:
+        working-directory: accounts/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MGMT_ACCOUNT_ID }}:role/GitHubActionsRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var="dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}"
+
+  apply_staging:
+    name: "Apply Staging"
+    runs-on: ubuntu-latest
+    needs: apply_dev   # Only runs if dev succeeded
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+
+    defaults:
+      run:
+        working-directory: accounts/staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MGMT_ACCOUNT_ID }}:role/GitHubActionsRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var="staging_account_id=${{ secrets.STAGING_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}"
+
+  apply_prod:
+    name: "Apply Prod"
+    runs-on: ubuntu-latest
+    needs: apply_staging  # Only runs if staging succeeded
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: prod     # Configure this in GitHub to require manual approval!
+
+    defaults:
+      run:
+        working-directory: accounts/prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MGMT_ACCOUNT_ID }}:role/GitHubActionsRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var="prod_account_id=${{ secrets.PROD_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}"
