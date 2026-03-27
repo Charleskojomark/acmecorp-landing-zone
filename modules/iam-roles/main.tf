@@ -107,7 +107,11 @@ resource "aws_iam_policy" "terraform_deploy" {
           "kms:ListGrants",
           "kms:ListResourceTags",
           "kms:PutKeyPolicy",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion",
           "kms:TagResource",
+          "kms:RevokeGrant",
+          "kms:RetireGrant",
           # SNS for notifications
           "sns:*",
           # STS for cross-account role chaining
