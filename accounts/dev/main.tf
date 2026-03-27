@@ -15,7 +15,7 @@ provider "aws" {
   region = var.aws_region
   assume_role {
     role_arn     = "arn:aws:iam::${var.dev_account_id}:role/${var.bootstrap_role_name}"
-    external_id  = var.external_id
+    external_id  = var.bootstrap_role_name == "acmecorp-terraform-deploy" ? var.external_id : null
     session_name = "TerraformGitHubActions"
   }
 }
