@@ -1,13 +1,13 @@
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.10.0"
   required_providers {
     aws = { source = "hashicorp/aws", version = "~> 5.0" }
   }
   backend "s3" {
-    bucket         = "acmecorp-terraform-state-272594899659"
-    key            = "accounts/management/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
+    bucket       = "acmecorp-terraform-state-272594899659"
+    key          = "accounts/management/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
     use_lockfile = true
   }
 }
@@ -24,8 +24,8 @@ provider "aws" {
 # AWS verifies that token against this provider to confirm the
 # request is genuinely coming from YOUR repository.
 resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
   # This thumbprint is GitHub's TLS certificate fingerprint
   # AWS uses this to verify the OIDC tokens are really from GitHub
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
@@ -52,7 +52,7 @@ resource "aws_iam_role" "github_actions" {
         StringLike = {
           # Only YOUR repository can assume this role
           # Replace with your actual org/repo
-          "token.actions.githubusercontent.com:sub" = "repo:YOUR_GITHUB_ORG/acmecorp-landing-zone:*"
+          "token.actions.githubusercontent.com:sub" = "repo:Charleskojomark/acmecorp-landing-zone:*"
         }
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
