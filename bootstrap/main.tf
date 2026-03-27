@@ -17,7 +17,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  required_version = ">= 1.7.0"
+  required_version = ">= 1.10.0"
 }
 
 provider "aws" {
@@ -276,7 +276,10 @@ resource "aws_sns_topic_policy" "terraform_state_events" {
         Resource = aws_sns_topic.terraform_state_events.arn
         Condition = {
           ArnLike = {
-            "aws:SourceArn" = aws_s3_bucket.terraform_state.arn
+            "aws:SourceArn" = [
+              aws_s3_bucket.terraform_state.arn,
+              aws_s3_bucket.access_logs.arn
+            ]
           }
         }
       }
