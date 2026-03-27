@@ -71,10 +71,10 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Sid    = "AssumeDeployRolesInWorkloadAccounts"
         Effect = "Allow"
-        # Can assume the TerraformDeployRole in ANY account
-        # Scoped down because TerraformDeployRole has its own external_id condition
+        # Can assume the acmecorp-terraform-deploy in ANY account
+        # Scoped down because acmecorp-terraform-deploy has its own external_id condition
         Action   = ["sts:AssumeRole"]
-        Resource = "arn:aws:iam::*:role/TerraformDeployRole"
+        Resource = "arn:aws:iam::*:role/acmecorp-terraform-deploy"
       },
       {
         Sid    = "ManageRemoteState"
