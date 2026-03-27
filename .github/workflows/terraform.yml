@@ -241,6 +241,11 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Debug - List Subaccount Roles
+        run: |
+          echo "Checking available roles in account ${{ secrets.DEV_ACCOUNT_ID }}..."
+          aws iam list-roles --query 'Roles[?contains(RoleName, `Access`) || contains(RoleName, `Admin`)].RoleName' --output text || echo "Failed to list roles"
+
       - name: Bootstrap IAM Roles
         run: |
           # Try OrganizationAccountAccessRole first, then fallback to AdministratorAccess
