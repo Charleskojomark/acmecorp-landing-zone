@@ -60,9 +60,55 @@ resource "aws_default_security_group" "default" {
 # FIX: CKV2_AWS_11 — VPC flow logging
 # Captures all accepted/rejected traffic for security auditing.
 # -------------------------------------------------------
+# FIX: CKV_AWS_158 — CloudWatch logs encrypted by KMS
+# FIX: CKV_AWS_338 — Reain logs for at least 1 year
+resource "aws_kms_key" "cloudwatch" {
+  description             = "KMS key for CloudWatch logs"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs to use the key"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.us-east-1.amazonaws.com" # Scoped to region
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_kms_alias" "cloudwatch" {
+  name          = "alias/${var.name}-cloudwatch-key-${var.environment}"
+  target_key_id = aws_kms_key.cloudwatch.key_id
+}
+
 resource "aws_cloudwatch_log_group" "flow_log" {
   name              = "/aws/vpc/flow-log/${var.name}-${var.environment}"
-  retention_in_days = 90
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.cloudwatch.arn
 
   tags = merge(local.common_tags, {
     Name = "${var.name}-flow-log-${var.environment}"
@@ -143,6 +189,7 @@ resource "aws_internet_gateway" "main" {
 #checkov:skip=CKV_AWS_130:Public subnets are for ALBs and NAT GWs only; EKS ELB integration requires map_public_ip_on_launch
 # -------------------------------------------------------
 resource "aws_subnet" "public" {
+  # checkov:skip=CKV_AWS_130:Public subnets are for ALBs and NAT GWs only; EKS ELB integration requires map_public_ip_on_launch
   count = length(var.public_subnet_cidrs)
 
   vpc_id            = aws_vpc.main.id

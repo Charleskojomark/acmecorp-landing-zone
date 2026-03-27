@@ -34,6 +34,33 @@ resource "aws_kms_key" "terraform_state" {
   deletion_window_in_days = 30
   enable_key_rotation     = true
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow S3 and SNS to use the key"
+        Effect = "Allow"
+        Principal = {
+          Service = ["s3.amazonaws.com", "sns.amazonaws.com"]
+        }
+        Action = [
+          "kms:GenerateDataKey*",
+          "kms:Decrypt"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
   tags = {
     Name      = "terraform-state-kms-key"
     ManagedBy = "Terraform Bootstrap"
@@ -52,6 +79,21 @@ resource "aws_kms_key" "dynamodb" {
   description             = "KMS key for Terraform lock table encryption"
   deletion_window_in_days = 30
   enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      }
+    ]
+  })
 
   tags = {
     Name      = "terraform-dynamodb-kms-key"
@@ -121,6 +163,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
     }
     noncurrent_version_expiration {
       noncurrent_days = 90
+    }
+    # FIX: CKV_AWS_300 — abort failed uploads
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }
@@ -240,6 +286,19 @@ resource "aws_sns_topic_policy" "terraform_state_events" {
 
 resource "aws_s3_bucket_notification" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
+
+  topic {
+    topic_arn     = aws_sns_topic.terraform_state_events.arn
+    events        = ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
+    filter_prefix = ""
+  }
+
+  depends_on = [aws_sns_topic_policy.terraform_state_events]
+}
+
+# FIX: CKV2_AWS_62 — enable S3 event notifications for access logs
+resource "aws_s3_bucket_notification" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
 
   topic {
     topic_arn     = aws_sns_topic.terraform_state_events.arn
