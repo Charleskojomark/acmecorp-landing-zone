@@ -76,7 +76,8 @@ resource "aws_iam_role_policy" "github_actions" {
         Action   = ["sts:AssumeRole"]
         Resource = [
           "arn:aws:iam::*:role/acmecorp-terraform-deploy",
-          "arn:aws:iam::*:role/OrganizationAccountAccessRole"
+          "arn:aws:iam::*:role/OrganizationAccountAccessRole",
+          "arn:aws:iam::*:role/AdministratorAccess"
         ]
       },
       {

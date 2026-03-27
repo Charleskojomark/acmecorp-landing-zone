@@ -242,16 +242,22 @@ jobs:
         run: terraform init
 
       - name: Bootstrap IAM Roles
-        # We use -refresh=false here to avoid reading existing resources (like KMS)
-        # that might trigger AccessDenied errors before the roles are updated.
         run: |
+          # Try OrganizationAccountAccessRole first, then fallback to AdministratorAccess
           terraform apply -auto-approve \
             -target=module.iam_roles \
             -var="dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}" \
             -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
             -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
             -var="bootstrap_role_name=OrganizationAccountAccessRole" \
-            -refresh=false || true
+            -refresh=false || \
+          terraform apply -auto-approve \
+            -target=module.iam_roles \
+            -var="dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -var="bootstrap_role_name=AdministratorAccess" \
+            -refresh=false
 
       - name: Terraform Apply
         run: |
@@ -296,7 +302,14 @@ jobs:
             -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
             -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
             -var="bootstrap_role_name=OrganizationAccountAccessRole" \
-            -refresh=false || true
+            -refresh=false || \
+          terraform apply -auto-approve \
+            -target=module.iam_roles \
+            -var="staging_account_id=${{ secrets.STAGING_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -var="bootstrap_role_name=AdministratorAccess" \
+            -refresh=false
 
       - name: Terraform Apply
         run: |
@@ -341,7 +354,14 @@ jobs:
             -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
             -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
             -var="bootstrap_role_name=OrganizationAccountAccessRole" \
-            -refresh=false || true
+            -refresh=false || \
+          terraform apply -auto-approve \
+            -target=module.iam_roles \
+            -var="prod_account_id=${{ secrets.PROD_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -var="bootstrap_role_name=AdministratorAccess" \
+            -refresh=false
 
       - name: Terraform Apply
         run: |
