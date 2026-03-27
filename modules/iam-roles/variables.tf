@@ -6,7 +6,7 @@ variable "management_account_id" {
 variable "external_id" {
   description = "External ID adds an extra layer of security to cross-account role assumption. Use a random UUID."
   type        = string
-  sensitive   = true  # Marks this as sensitive so it won't show in logs
+  sensitive   = true # Marks this as sensitive so it won't show in logs
 }
 
 variable "environment" {

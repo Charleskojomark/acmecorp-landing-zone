@@ -30,9 +30,9 @@ module "vpc" {
   single_nat_gateway = false
 
   tags = {
-    CostCenter   = "engineering-prod"
-    Criticality  = "high"
-    DataClass    = "confidential"
+    CostCenter  = "engineering-prod"
+    Criticality = "high"
+    DataClass   = "confidential"
   }
 }
 
@@ -44,6 +44,6 @@ module "iam_roles" {
   environment           = "prod"
 }
 
-output "vpc_id"             { value = module.vpc.vpc_id }
+output "vpc_id" { value = module.vpc.vpc_id }
 output "private_subnet_ids" { value = module.vpc.private_subnet_ids }
-output "public_subnet_ids"  { value = module.vpc.public_subnet_ids }
+output "public_subnet_ids" { value = module.vpc.public_subnet_ids }
