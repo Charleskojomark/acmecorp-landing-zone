@@ -96,22 +96,8 @@ resource "aws_iam_policy" "terraform_deploy" {
           "ssm:GetParameters",
           "ssm:GetParametersByPath",
           "ssm:PutParameter",
-          # KMS for encryption
-          "kms:CreateKey",
-          "kms:CreateAlias",
-          "kms:DescribeKey",
-          "kms:EnableKeyRotation",
-          "kms:GetKeyPolicy",
-          "kms:GetKeyRotationStatus",
-          "kms:ListAliases",
-          "kms:ListGrants",
-          "kms:ListResourceTags",
-          "kms:PutKeyPolicy",
-          "kms:ScheduleKeyDeletion",
-          "kms:CancelKeyDeletion",
-          "kms:TagResource",
-          "kms:RevokeGrant",
-          "kms:RetireGrant",
+          # KMS for encryption (Broad permissions for deployment role)
+          "kms:*",
           # SNS for notifications
           "sns:*",
           # STS for cross-account role chaining
