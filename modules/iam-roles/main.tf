@@ -104,6 +104,8 @@ resource "aws_iam_policy" "terraform_deploy" {
           "kms:GetKeyPolicy",
           "kms:GetKeyRotationStatus",
           "kms:ListAliases",
+          "kms:ListGrants",
+          "kms:ListResourceTags",
           "kms:PutKeyPolicy",
           "kms:TagResource",
           # SNS for notifications
