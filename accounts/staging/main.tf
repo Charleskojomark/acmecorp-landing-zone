@@ -8,7 +8,7 @@ terraform {
 provider "aws" {
   region = var.aws_region
   assume_role {
-    role_arn     = "arn:aws:iam::${var.staging_account_id}:role/acmecorp-terraform-deploy"
+    role_arn     = "arn:aws:iam::${var.staging_account_id}:role/${var.bootstrap_role_name}"
     external_id  = var.external_id
     session_name = "TerraformGitHubActions"
   }

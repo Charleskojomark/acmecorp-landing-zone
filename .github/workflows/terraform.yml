@@ -241,6 +241,17 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Bootstrap IAM Roles
+        # If the standard apply fails because the role doesn't exist, this step
+        # will 'seed' the account using the default OrganizationAccountAccessRole
+        run: |
+          terraform apply -auto-approve \
+            -target=module.iam_roles \
+            -var="dev_account_id=${{ secrets.DEV_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -var="bootstrap_role_name=OrganizationAccountAccessRole" || true
+
       - name: Terraform Apply
         run: |
           terraform apply -auto-approve \
@@ -276,6 +287,15 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Bootstrap IAM Roles
+        run: |
+          terraform apply -auto-approve \
+            -target=module.iam_roles \
+            -var="staging_account_id=${{ secrets.STAGING_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -var="bootstrap_role_name=OrganizationAccountAccessRole" || true
+
       - name: Terraform Apply
         run: |
           terraform apply -auto-approve \
@@ -310,6 +330,15 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+
+      - name: Bootstrap IAM Roles
+        run: |
+          terraform apply -auto-approve \
+            -target=module.iam_roles \
+            -var="prod_account_id=${{ secrets.PROD_ACCOUNT_ID }}" \
+            -var="management_account_id=${{ secrets.MGMT_ACCOUNT_ID }}" \
+            -var="external_id=${{ secrets.TF_EXTERNAL_ID }}" \
+            -var="bootstrap_role_name=OrganizationAccountAccessRole" || true
 
       - name: Terraform Apply
         run: |

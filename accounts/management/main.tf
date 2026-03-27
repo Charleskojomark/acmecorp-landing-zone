@@ -74,7 +74,10 @@ resource "aws_iam_role_policy" "github_actions" {
         # Can assume the acmecorp-terraform-deploy in ANY account
         # Scoped down because acmecorp-terraform-deploy has its own external_id condition
         Action   = ["sts:AssumeRole"]
-        Resource = "arn:aws:iam::*:role/acmecorp-terraform-deploy"
+        Resource = [
+          "arn:aws:iam::*:role/acmecorp-terraform-deploy",
+          "arn:aws:iam::*:role/OrganizationAccountAccessRole"
+        ]
       },
       {
         Sid    = "ManageRemoteState"
