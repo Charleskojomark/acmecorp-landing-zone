@@ -81,6 +81,12 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
       },
       {
+        Sid    = "Diagnostics"
+        Effect = "Allow"
+        Action = ["iam:ListRoles", "sts:GetCallerIdentity"]
+        Resource = "*"
+      },
+      {
         Sid    = "ManageRemoteState"
         Effect = "Allow"
         Action = [
